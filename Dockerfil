@@ -9,7 +9,12 @@ ENV LANG C.UTF-8
 # Set Python version as an environment variable
 ENV PYTHON_VERSION=3.12.7
 
-# Install minimal build dependencies
+# Set the correct APT sources for Ubuntu 22.04
+RUN echo "deb http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse" > /etc/apt/sources.list && \
+    echo "deb http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb http://archive.ubuntu.com/ubuntu jammy-security main restricted universe multiverse" >> /etc/apt/sources.list
+
+# Install minimal build dependencies compatible with Ubuntu 22.04
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
@@ -20,7 +25,7 @@ RUN apt-get update && \
         libreadline-dev \
         libsqlite3-dev \
         libffi-dev \
-        libncursesw6-dev \
+        libncursesw5-dev \
         liblzma-dev && \
     rm -rf /var/lib/apt/lists/*
 
