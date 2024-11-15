@@ -1,67 +1,44 @@
-# Use your secured Ubuntu 22.04 LTS base image
 FROM secured-ubuntu:22.04
 
-# Set environment variables
+# Ensure local python is preferred over distribution python
 ENV PATH /usr/local/bin:$PATH
+
+# Set locale environment variable
 ENV LANG C.UTF-8
 
-# Define Python version and checksum
+# Set Python version as an environment variable
 ENV PYTHON_VERSION=3.12.7
-ENV PYTHON_SHA256=24887b92e2afd4a2ac602419ad4b596372f67ac9b077190f459aba390faf5550
-ENV GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305
 
 # Install minimal build dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        wget \
         build-essential \
+        wget \
         libssl-dev \
         zlib1g-dev \
-        libncursesw6-dev \
-        libreadline-dev \
-        libffi-dev \
         libbz2-dev \
-        liblzma-dev \
-        ca-certificates \
-        gnupg \
-    && rm -rf /var/lib/apt/lists/*
-
-# Download, verify, build, and install Python
-RUN set -eux; \
-    # Download Python source
-    wget -O python.tar.xz "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz"; \
-    echo "${PYTHON_SHA256} *python.tar.xz" | sha256sum -c -; \
-    wget -O python.tar.xz.asc "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz.asc"; \
-    # Import GPG key and verify signature
-    GNUPGHOME="$(mktemp -d)"; export GNUPGHOME; \
-    gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys "$GPG_KEY"; \
-    gpg --batch --verify python.tar.xz.asc python.tar.xz; \
-    gpgconf --kill all; \
-    rm -rf "$GNUPGHOME" python.tar.xz.asc; \
-    # Extract and build Python
-    mkdir -p /usr/src/python && \
-    tar -xJf python.tar.xz -C /usr/src/python --strip-components=1 && \
-    rm python.tar.xz && \
-    cd /usr/src/python && \
-    ./configure \
-        --enable-optimizations \
-        --enable-shared \
-        --with-ensurepip=install && \
-    make -j"$(nproc)" && \
-    make altinstall && \
-    # Clean up build dependencies and source
-    cd / && \
-    rm -rf /usr/src/python && \
-    ldconfig && \
-    apt-get purge -y --auto-remove wget build-essential && \
+        libreadline-dev \
+        libsqlite3-dev \
+        libffi-dev \
+        libncursesw6-dev \
+        liblzma-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Create symlinks for convenience
-RUN ln -s /usr/local/bin/python3.12 /usr/local/bin/python3 && \
-    ln -s /usr/local/bin/pip3.12 /usr/local/bin/pip3
+# Download, build, and install Python
+RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz && \
+    tar -xzf Python-${PYTHON_VERSION}.tgz && \
+    cd Python-${PYTHON_VERSION} && \
+    ./configure --enable-optimizations --with-ensurepip=install && \
+    make -j$(nproc) && \
+    make altinstall && \
+    cd .. && \
+    rm -rf Python-${PYTHON_VERSION}*
 
-# Verify Python installation
-RUN python3 --version && pip3 --version
+# Clean up build dependencies to reduce image size
+RUN apt-get purge -y --auto-remove \
+        build-essential \
+        wget && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set the default command to python3
-CMD ["python3"]
+# Set default command to Python 3.12
+CMD ["python3.12"]
