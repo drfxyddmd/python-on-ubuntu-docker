@@ -10,14 +10,14 @@ org = g.get_organization("your_organization")
 # Get all members of the organization
 members = org.get_members()
 
-# Prepare a list of usernames
-usernames = [member.login for member in members]
+# Prepare a list of user information (username and display name)
+user_info_list = [(member.login, member.name or '') for member in members]
 
 # Prepare a dictionary to hold the mapping
-user_team_mapping = {username: [] for username in usernames}
+user_team_mapping = {login: {'name': name, 'teams': []} for login, name in user_info_list}
 
 # Convert the list of usernames to a set for faster lookup
-usernames_set = set(usernames)
+usernames_set = set(login for login, _ in user_info_list)
 
 # Get all teams in the organization
 teams = org.get_teams()
@@ -30,21 +30,23 @@ for team in teams:
     for member in team_members:
         # Check if the member's login is in our list
         if member.login in usernames_set:
-            user_team_mapping[member.login].append(team.name)
+            user_team_mapping[member.login]['teams'].append(team.name)
 
 # Save the mapping to a CSV file
 output_filename = 'user_team_mapping.csv'
-with open(output_filename, mode='w', newline='') as csvfile:
+with open(output_filename, mode='w', newline='', encoding='utf-8') as csvfile:
     writer = csv.writer(csvfile)
     # Write header
-    writer.writerow(['Username', 'Teams'])
+    writer.writerow(['Username', 'Display Name', 'Teams'])
     # Write user-team mappings
-    for username in usernames:
-        teams = user_team_mapping.get(username, [])
-        row = [username] + teams
+    for login, info in user_team_mapping.items():
+        name = info['name']
+        teams = info['teams']
+        row = [login, name] + teams
         writer.writerow(row)
 
 # Output the mapping (optional)
-for username in usernames:
-    teams = user_team_mapping.get(username, [])
-    print(f"User: {username}, Teams: {', '.join(teams) if teams else 'No team found'}")
+for login, info in user_team_mapping.items():
+    name = info['name']
+    teams = info['teams']
+    print(f"User: {login}, Name: {name}, Teams: {', '.join(teams) if teams else 'No team found'}")
