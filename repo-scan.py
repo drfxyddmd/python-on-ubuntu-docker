@@ -3,6 +3,7 @@ import csv
 from datetime import datetime, timedelta
 from github import Github
 import yaml
+import re
 
 # -------------------- Configuration --------------------
 
@@ -57,7 +58,7 @@ def main():
             contents = repo.get_contents("catalog-info.yaml", ref=repo.default_branch)
             catalog_content = contents.decoded_content.decode()
             catalog_yaml = yaml.safe_load(catalog_content)
-            catalog_owner = catalog_yaml.get('owner', '')
+            catalog_owner = catalog_yaml.get('owner', 'Not Found')
         except Exception:
             # File not found or error in reading/parsing
             catalog_owner = 'Not Found'
@@ -82,13 +83,23 @@ def main():
         for path in codeowners_paths:
             try:
                 contents = repo.get_contents(path, ref=repo.default_branch)
-                codeowners_content = contents.decoded_content.decode()
-                codeowners = parse_codeowners(codeowners_content)
-                codeowners_found = True
-                break  # Stop after finding the first CODEOWNERS file
+                codeowners_file = contents.decoded_content.decode()
+                codeowners = []
+                for line in codeowners_file.split('\n'):
+                    match = re.search(r'^\s*\*\s+(.*)$', line)
+                    if match:
+                        codeowners.extend([
+                            o.split('/', maxsplit=1)[-1]
+                            for o in re.split(r'\s+', match.group(1))
+                            if o.startswith('@company/')
+                        ])
+                codeowners = list(set(codeowners))  # Remove duplicates
+                if codeowners:
+                    codeowners_found = True
+                    break  # Stop after finding the first CODEOWNERS file with owners
             except Exception:
                 continue  # Try the next possible CODEOWNERS path
-        if not codeowners_found:
+        if not codeowners_found or not codeowners:
             codeowners = ['Not Found']
 
         # -------------------- Append Data --------------------
@@ -108,4 +119,11 @@ def main():
             for row in data:
                 writer.writerow(row)
         print(f"Data written to '{OUTPUT_CSV}'.")
-    except Exception as 
+    except Exception as e:
+        print(f"Error writing to CSV file: {e}")
+        exit(1)
+
+# -------------------- Entry Point --------------------
+
+if __name__ == '__main__':
+    main()
