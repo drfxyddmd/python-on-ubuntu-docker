@@ -17,6 +17,9 @@ if not token:
 # GitHub organization name
 ORG_NAME = 'your_organization'  # Replace with your organization name
 
+# Number of repositories to scan (used if REPO_LINKS is empty)
+MAX_REPOS = 10  # Change this value as needed
+
 # Manually specified repository links (full URLs)
 # If this list is not empty, the script will process these repositories
 REPO_LINKS = [
@@ -57,10 +60,14 @@ def main():
             print(f"Error accessing organization '{ORG_NAME}': {e}")
             exit(1)
 
-        # Get all repositories from the organization
+        # Get repositories from the organization up to MAX_REPOS
         try:
             repos = org.get_repos()
-            repos_to_process.extend(repos)
+            # Collect repositories up to MAX_REPOS
+            for i, repo in enumerate(repos):
+                if i >= MAX_REPOS:
+                    break
+                repos_to_process.append(repo)
         except Exception as e:
             print(f"Error retrieving repositories: {e}")
             exit(1)
