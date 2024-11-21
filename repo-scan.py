@@ -1,0 +1,111 @@
+import os
+import csv
+from datetime import datetime, timedelta
+from github import Github
+import yaml
+
+# -------------------- Configuration --------------------
+
+# GitHub Personal Access Token (PAT)
+# Ensure your token has the necessary scopes, such as 'repo'
+token = os.getenv("GITHUB_TOKEN")
+if not token:
+    print("Error: GITHUB_TOKEN environment variable not set.")
+    exit(1)
+
+# GitHub organization name
+ORG_NAME = 'your_organization'  # Replace with your organization name
+
+# Number of repositories to scan
+MAX_REPOS = 10  # Change this value as needed
+
+# Output CSV file name
+OUTPUT_CSV = 'repo_info.csv'
+
+# -------------------- Script --------------------
+
+def main():
+    # Authenticate with GitHub
+    g = Github(token)
+
+    try:
+        # Get the organization
+        org = g.get_organization(ORG_NAME)
+    except Exception as e:
+        print(f"Error accessing organization '{ORG_NAME}': {e}")
+        exit(1)
+
+    # Get repositories
+    try:
+        repos = org.get_repos()[:MAX_REPOS]
+    except Exception as e:
+        print(f"Error retrieving repositories: {e}")
+        exit(1)
+
+    # Prepare data list
+    data = []
+
+    for repo in repos:
+        print(f"Processing repository: {repo.full_name}")
+        repo_link = repo.html_url
+        catalog_owner = ''
+        codeowners = []
+        top_contributors = []
+
+        # -------------------- Check for catalog-info.yaml --------------------
+        try:
+            contents = repo.get_contents("catalog-info.yaml", ref=repo.default_branch)
+            catalog_content = contents.decoded_content.decode()
+            catalog_yaml = yaml.safe_load(catalog_content)
+            catalog_owner = catalog_yaml.get('owner', '')
+        except Exception:
+            # File not found or error in reading/parsing
+            catalog_owner = 'Not Found'
+
+        # -------------------- Get Top Contributors --------------------
+        try:
+            since = datetime.now() - timedelta(days=365 * 2)
+            commits = repo.get_commits(since=since.isoformat())
+            contributor_counts = {}
+            for commit in commits:
+                if commit.author and commit.author.login:
+                    contributor_counts[commit.author.login] = contributor_counts.get(commit.author.login, 0) + 1
+            # Sort contributors by commit count
+            sorted_contributors = sorted(contributor_counts.items(), key=lambda x: x[1], reverse=True)
+            top_contributors = [login for login, _ in sorted_contributors[:3]]
+        except Exception as e:
+            top_contributors = []
+
+        # -------------------- Check for CODEOWNERS --------------------
+        codeowners_paths = ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"]
+        codeowners_found = False
+        for path in codeowners_paths:
+            try:
+                contents = repo.get_contents(path, ref=repo.default_branch)
+                codeowners_content = contents.decoded_content.decode()
+                codeowners = parse_codeowners(codeowners_content)
+                codeowners_found = True
+                break  # Stop after finding the first CODEOWNERS file
+            except Exception:
+                continue  # Try the next possible CODEOWNERS path
+        if not codeowners_found:
+            codeowners = ['Not Found']
+
+        # -------------------- Append Data --------------------
+        data.append({
+            'Repo Link': repo_link,
+            'Catalog Owner': catalog_owner,
+            'Codeowners': ', '.join(codeowners),
+            'Top Contributors': ', '.join(top_contributors) if top_contributors else 'No contributors found'
+        })
+
+    # -------------------- Write to CSV --------------------
+    try:
+        with open(OUTPUT_CSV, mode='w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['Repo Link', 'Catalog Owner', 'Codeowners', 'Top Contributors']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in data:
+                writer.writerow(row)
+        print(f"Data written to '{OUTPUT_CSV}'.")
+    except Exception as 
