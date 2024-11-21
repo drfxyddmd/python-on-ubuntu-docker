@@ -17,8 +17,13 @@ if not token:
 # GitHub organization name
 ORG_NAME = 'your_organization'  # Replace with your organization name
 
-# Number of repositories to scan
-MAX_REPOS = 10  # Change this value as needed
+# Manually specified repository links (full URLs)
+# If this list is not empty, the script will process these repositories
+REPO_LINKS = [
+    # Insert your repository links here, e.g.,
+    # 'https://github.com/your_organization/repo1',
+    # 'https://github.com/your_organization/repo2',
+]
 
 # Output CSV file name
 OUTPUT_CSV = 'repo_info.csv'
@@ -29,24 +34,41 @@ def main():
     # Authenticate with GitHub
     g = Github(token)
 
-    try:
-        # Get the organization
-        org = g.get_organization(ORG_NAME)
-    except Exception as e:
-        print(f"Error accessing organization '{ORG_NAME}': {e}")
-        exit(1)
+    # Prepare the list of repositories to process
+    repos_to_process = []
 
-    # Get repositories
-    try:
-        repos = org.get_repos()[:MAX_REPOS]
-    except Exception as e:
-        print(f"Error retrieving repositories: {e}")
-        exit(1)
+    if REPO_LINKS:
+        # Manually specified repositories
+        for repo_link in REPO_LINKS:
+            try:
+                # Extract owner and repo name from the URL
+                path_parts = repo_link.strip().split('/')
+                owner = path_parts[-2]
+                repo_name = path_parts[-1]
+                repo = g.get_repo(f"{owner}/{repo_name}")
+                repos_to_process.append(repo)
+            except Exception as e:
+                print(f"Error accessing repository '{repo_link}': {e}")
+    else:
+        try:
+            # Get the organization
+            org = g.get_organization(ORG_NAME)
+        except Exception as e:
+            print(f"Error accessing organization '{ORG_NAME}': {e}")
+            exit(1)
+
+        # Get all repositories from the organization
+        try:
+            repos = org.get_repos()
+            repos_to_process.extend(repos)
+        except Exception as e:
+            print(f"Error retrieving repositories: {e}")
+            exit(1)
 
     # Prepare data list
     data = []
 
-    for repo in repos:
+    for repo in repos_to_process:
         print(f"Processing repository: {repo.full_name}")
         repo_link = repo.html_url
         catalog_owner = ''
