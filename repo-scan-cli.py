@@ -4,17 +4,17 @@
 ORG_NAME="your-organization"
 
 # Number of repositories to scan (set to a large number to scan all)
-MAX_REPOS=10  # Adjust as needed
+MAX_REPOS=100  # Adjust as needed
 
 # Output CSV file
 OUTPUT_CSV="top_contributors.csv"
 
 # Write CSV headers
-echo "Repository,Contributor,Contributions" > $OUTPUT_CSV
+echo "Repository,Contributors" > $OUTPUT_CSV
 
-# Get the list of repositories in the organization
+# Get the list of repositories in the organization, excluding archived repositories
 echo "Fetching repositories for organization '$ORG_NAME'..."
-repos=$(gh repo list $ORG_NAME --limit $MAX_REPOS --json name --jq '.[].name')
+repos=$(gh repo list $ORG_NAME --no-archived --limit $MAX_REPOS --json name --jq '.[].name')
 
 if [ -z "$repos" ]; then
   echo "No repositories found or unable to fetch repositories."
@@ -26,18 +26,18 @@ for repo in $repos; do
   echo "Processing repository: $repo"
 
   # Get the top contributors
-  contributors=$(gh api repos/$ORG_NAME/$repo/contributors --paginate --jq '.[] | {login: .login, contributions: .contributions}')
+  contributors=$(gh api repos/$ORG_NAME/$repo/contributors --paginate --jq '.[] | .login')
 
   if [ -z "$contributors" ]; then
     echo "  No contributors found."
     continue
   fi
 
-  # Parse and sort contributors
-  top_contributors=$(echo "$contributors" | jq -s 'sort_by(-.contributions) | .[:3]')
+  # Get the top 3 contributors
+  top_contributors=$(echo "$contributors" | head -n 3 | paste -sd ',' -)
 
   # Append to CSV
-  echo "$top_contributors" | jq -r --arg repo "$repo" '.[] | "\($repo),\(.login),\(.contributions)"' >> $OUTPUT_CSV
+  echo "$repo,\"$top_contributors\"" >> $OUTPUT_CSV
 done
 
 echo "Data written to $OUTPUT_CSV"
