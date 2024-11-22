@@ -51,7 +51,7 @@ echo "$repos" | jq -c '.' | while read -r repo_info; do
     codeowners_content=$(gh api -H "Accept: application/vnd.github.v3.raw" repos/"$ORG_NAME"/"$repo_name"/contents/"$path" 2>/dev/null)
     if [ -n "$codeowners_content" ]; then
       # Extract code owners from the CODEOWNERS file
-      codeowners=$(echo "$codeowners_content" | grep -E '^\s*\*\s+' | awk '{for(i=2;i<=NF;i++) print $i}' | grep '^@' | sed 's/@//' | tr '\n' ',' | sed 's/,$//')
+      codeowners=$(echo "$codeowners_content" | grep -E '^\s*\*\s+' | awk '{for(i=2;i<=NF;i++) print $i}' | grep '^@' | sed 's/@company\///; s/@//' | tr '\n' ',' | sed 's/,$//')
       if [ -z "$codeowners" ]; then
         codeowners="Not Found"
       fi
