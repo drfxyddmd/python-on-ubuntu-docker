@@ -1,39 +1,47 @@
 #!/bin/bash
-set -e
+set -ex
 
-echo "=== Local Docker Image Hardening Workflow ==="
+echo "=== Generic Docker Image Hardening Workflow ==="
 
-# Prompt for user inputs
-read -p "Enter the registry (e.g., docker.io): " REGISTRY
-read -p "Enter the image name (e.g., mariadb): " IMAGE_NAME
-read -p "Enter the hardening preset (light, medium, or hard): " PRESET
+# Prompt for the image input in the format name:tag (e.g., mariadb:latest)
+read -p "Enter image (format name:tag, e.g., mariadb:latest): " IMAGE
 
-# Construct full image names
-ORIGINAL_IMAGE="${REGISTRY}/${IMAGE_NAME}:latest"
-STUB_IMAGE="${IMAGE_NAME}:latest-rfstub"
-HARDENED_IMAGE="${REGISTRY}/${IMAGE_NAME}:latest-rfhardened"
+# Split the input into name and tag
+NAME=$(echo "$IMAGE" | cut -d: -f1)
+TAG=$(echo "$IMAGE" | cut -d: -f2)
 
-echo "Pulling original image: ${ORIGINAL_IMAGE}..."
-docker pull "${ORIGINAL_IMAGE}"
+# Pull the specified image from Docker Hub
+echo "Pulling image $IMAGE..."
+docker pull "$IMAGE"
 
-echo "Creating stub image using rfstub..."
-rfstub "${ORIGINAL_IMAGE}"
-# The stub image is expected to be tagged as ${STUB_IMAGE}
-docker images | grep "${IMAGE_NAME}"
+# Generate the stub image using rfstub.
+# This creates a new image tagged as ${NAME}:${TAG}-rfstub.
+echo "Generating stub image from $IMAGE..."
+rfstub "$IMAGE"
+STUB_IMAGE="${NAME}:${TAG}-rfstub"
 
-echo "Running stub container..."
-docker run --rm -d -p9999:80 --cap-add=SYS_PTRACE --name rf-test "${STUB_IMAGE}"
+# Run the stub container with the SYS_PTRACE capability.
+# The container is run in detached mode with port mapping 9999:80.
+echo "Running stub container from $STUB_IMAGE..."
+docker run --rm -d -p9999:80 --cap-add=SYS_PTRACE --name rf-test "$STUB_IMAGE"
+
+# Wait a few seconds for the container to initialize.
 echo "Waiting for container initialization..."
-sleep 10
+sleep 15
+
+# Stop the running container.
 echo "Stopping stub container..."
 docker stop rf-test
 
-echo "Hardening stub image with preset '${PRESET}'..."
-rfharden "${STUB_IMAGE}" --preset "${PRESET}"
-# The hardened image is expected to be tagged as ${HARDENED_IMAGE}
+# Harden the stub image using rfharden with preset "light".
+# This creates a hardened image tagged as ${NAME}:${TAG}-rfhardened.
+echo "Hardening stub image with preset 'light'..."
+rfharden "$STUB_IMAGE" --preset light
+HARDENED_IMAGE="${NAME}:${TAG}-rfhardened"
 
-echo "Pushing hardened image: ${HARDENED_IMAGE}..."
-docker push "${HARDENED_IMAGE}"
+# Push the hardened image back to Docker Hub.
+echo "Pushing hardened image $HARDENED_IMAGE..."
+docker push "$HARDENED_IMAGE"
 
 echo "Workflow completed successfully!"
 
