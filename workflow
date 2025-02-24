@@ -52,73 +52,85 @@ echo "Workflow completed successfully!"
 
 
 
-name: Harden Docker Image
+
+
+name: Generic Docker Image Hardening Demo
 
 on:
+  schedule:
+    - cron: '0 5 * * *'
   workflow_dispatch:
     inputs:
-      registry:
-        description: 'Docker registry (e.g., docker.io, ghcr.io, quay.io)'
+      image:
+        description: 'Enter image in format name:tag (e.g., mariadb:latest)'
         required: true
-        default: 'docker.io'
-      image_name:
-        description: 'Image name (e.g., my-org/my-image or simply mariadb)'
-        required: true
-      preset:
-        description: 'Hardening preset (light, medium, or hard)'
-        required: true
-        default: 'light'
-        type: choice
-        options:
-          - light
-          - medium
-          - hard
+        default: 'mariadb:latest'
+
+permissions: read-all
 
 jobs:
-  harden:
+  build:
     runs-on: ubuntu-latest
+    environment: actions-cicd
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - name: Install RapidFort CLI Tools
+        run: curl https://frontrow.rapidfort.com/cli/ | bash
 
-      - name: Login to Registry
-        # Ensure you have set up the following secrets:
-        # REGISTRY_USERNAME and REGISTRY_PASSWORD.
-        run: |
-          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ inputs.registry }} -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin
+      - name: Authenticate with RapidFort
+        env:
+          RF_ACCESS_ID: ${{ secrets.RF_ACCESS_ID }}
+          RF_SECRET_ACCESS_KEY: ${{ secrets.RF_SECRET_ACCESS_KEY }}
+        run: rflogin
 
-      - name: Pull Original Image
+      - name: Pull the input image
         run: |
-          echo "Pulling ${{ inputs.registry }}/${{ inputs.image_name }}:latest..."
-          docker pull ${{ inputs.registry }}/${{ inputs.image_name }}:latest
+          echo "Pulling image ${{ inputs.image }}..."
+          docker pull ${{ inputs.image }}
 
-      - name: Create Stub Image with rfstub
+      - name: Generate Stub Image with rfstub
         run: |
-          echo "Creating stub image..."
-          rfstub ${{ inputs.registry }}/${{ inputs.image_name }}:latest
-          # Assume the stub image gets tagged as <image_name>:latest-rfstub
-          docker images
+          echo "Generating stub image from ${{ inputs.image }}..."
+          rfstub ${{ inputs.image }}
+          # Extract name and tag from the input
+          NAME=$(echo "${{ inputs.image }}" | cut -d: -f1)
+          TAG=$(echo "${{ inputs.image }}" | cut -d: -f2)
+          STUB_IMAGE="${NAME}:${TAG}-rfstub"
+          echo "Stub image created: $STUB_IMAGE"
+          docker images | grep "$NAME"
 
       - name: Run Stub Container
         run: |
-          echo "Running stub container..."
-          docker run --rm -d -p9999:80 --cap-add=SYS_PTRACE --name=rf-test ${{ inputs.registry }}/${{ inputs.image_name }}:latest-rfstub
+          # Compute stub image name
+          NAME=$(echo "${{ inputs.image }}" | cut -d: -f1)
+          TAG=$(echo "${{ inputs.image }}" | cut -d: -f2)
+          STUB_IMAGE="${NAME}:${TAG}-rfstub"
+          echo "Running container from stub image $STUB_IMAGE..."
+          docker run --rm -d -p9999:80 --cap-add=SYS_PTRACE --name rf-test "$STUB_IMAGE"
           echo "Waiting for container initialization..."
-          sleep 10
-          echo "Stopping stub container..."
+          sleep 15
+          echo "Stopping container..."
           docker stop rf-test
 
-      - name: Harden Stub Image
+      - name: Harden Stub Image with rfharden
         run: |
-          echo "Hardening stub image with preset '${{ inputs.preset }}'..."
-          rfharden ${{ inputs.registry }}/${{ inputs.image_name }}:latest-rfstub --preset ${{ inputs.preset }}
-          # Assume the hardened image gets tagged as <image_name>:latest-rfhardened
+          # Recompute stub image name
+          NAME=$(echo "${{ inputs.image }}" | cut -d: -f1)
+          TAG=$(echo "${{ inputs.image }}" | cut -d: -f2)
+          STUB_IMAGE="${NAME}:${TAG}-rfstub"
+          echo "Hardening stub image $STUB_IMAGE with preset 'light'..."
+          rfharden "$STUB_IMAGE" --preset light
 
       - name: Push Hardened Image
         run: |
-          echo "Pushing hardened image to registry..."
-          docker push ${{ inputs.registry }}/${{ inputs.image_name }}:latest-rfhardened
+          # Compute hardened image name (assumes tag is appended with '-rfhardened')
+          NAME=$(echo "${{ inputs.image }}" | cut -d: -f1)
+          TAG=$(echo "${{ inputs.image }}" | cut -d: -f2)
+          HARDENED_IMAGE="${NAME}:${TAG}-rfhardened"
+          echo "Pushing hardened image $HARDENED_IMAGE..."
+          docker push "$HARDENED_IMAGE"
 
+      - name: Complete
+        run: echo "For more information, please visit: https://docs.rapidfort.com/getting-started/docker"
 
 
 
