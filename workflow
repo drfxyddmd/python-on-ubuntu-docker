@@ -15,8 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: actions-cicd
     steps:
+      - name: Ensure Python is installed
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3
+
       - name: Install the RapidFort CLI tools
-        run: curl https://frontrow.rapidfort.com/cli/ | bash
+        run: |
+          curl https://frontrow.rapidfort.com/cli/ | bash
+          echo "$HOME/.rapidfort/bin" >> $GITHUB_PATH
 
       - name: Authenticate with RapidFort
         env:
